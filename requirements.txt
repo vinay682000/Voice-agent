@@ -1,5 +1,9 @@
 # Voice Agent - Core Dependencies
 
+# Force CPU versions for light weight
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch>=2.0.0
+
 # Web Framework
 fastapi>=0.100.0
 uvicorn>=0.20.0

@@ -155,7 +155,6 @@
     <script>
         const statusEl = document.getElementById('status');
         const startBtn = document.getElementById('startBtn');
-        const transcriptEl = document.getElementById('transcript');
         const bars = document.querySelectorAll('.bar');
 
         let peerConnection = null;
@@ -254,7 +253,6 @@
 
                 startBtn.textContent = 'End Conversation';
                 startBtn.disabled = false;
-                transcriptEl.innerHTML = '';
 
             } catch (error) {
                 console.error('Connection error:', error);
@@ -319,11 +317,7 @@
 
         function addToTranscript(role, text) {
             if (!text || text.trim() === '') return;
-            const div = document.createElement('div');
-            div.className = role;
-            div.innerHTML = `<strong>${role === 'user' ? 'You' : 'Agent'}:</strong> ${text}`;
-            transcriptEl.appendChild(div);
-            transcriptEl.scrollTop = transcriptEl.scrollHeight;
+            console.log(`[Transcript] ${role}: ${text}`);
         }
     </script>
 </body>
