@@ -171,19 +171,24 @@ bandit -r main.py knowledge_base.py
 ```
 voice-agent/
 ├── main.py              # FastAPI server (token dispenser + KB API)
-├── knowledge_base.py    # FAISS-based RAG retrieval
+├── knowledge_base.py    # KB module (scans knowledge/ folder)
+├── knowledge/           # Drop your .txt/.md files here
+│   ├── README.md
+│   └── (your-files.txt)
 ├── index.html           # WebRTC frontend
 ├── .env                 # Azure credentials (not committed)
+├── .env.example         # Template for credentials
 ├── .gitignore
-├── requirements.txt
-└── tests/
-    ├── test_unit.py
-    ├── test_integration.py
-    ├── test_performance.py
-    ├── test_security.py
-    ├── test_stress.py
-    └── results/
-        └── TEST_SUMMARY.md
+├── requirements.txt     # Production dependencies
+├── requirements-dev.txt # Development dependencies
+└── tests/               # Coprehensive test suite (pytest)
+    ├── conftest.py          # Test configuration & fixtures
+    ├── test_unit.py         # Unit tests
+    ├── test_integration.py  # API integration tests
+    ├── test_performance.py  # Latency & throughput tests
+    ├── test_security.py     # SAST & security checks
+    ├── test_stress.py       # Load & stress tests
+    └── results/             # Test reports
 ```
 
 ---
