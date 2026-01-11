@@ -60,8 +60,8 @@ if "/" in hostname:
     hostname = hostname.split("/")[0]
 
 # --- Knowledge Base ---
-KB_FILE = "tactiq-free-transcript-SsKkZTjUJEk.txt"
-kb = KnowledgeBase(KB_FILE)
+# Automatically loads all .txt and .md files from 'knowledge/' folder
+kb = KnowledgeBase()  # Uses default 'knowledge/' folder
 
 # --- Models ---
 class SearchQuery(BaseModel):
