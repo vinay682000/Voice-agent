@@ -315,9 +315,20 @@
             }
         }
 
-        function addToTranscript(role, text) {
+        async function addToTranscript(role, text) {
             if (!text || text.trim() === '') return;
             console.log(`[Transcript] ${role}: ${text}`);
+
+            // Send to server for logging
+            try {
+                await fetch('/log_transcript', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ role, text })
+                });
+            } catch (e) {
+                console.error('Failed to log transcript:', e);
+            }
         }
     </script>
 </body>

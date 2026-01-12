@@ -39,3 +39,7 @@ Thumbs.db
 dist/
 build/
 *.egg-info/
+
+
+# Knowledge Base
+kb_index/

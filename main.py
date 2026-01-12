@@ -67,7 +67,16 @@ kb = KnowledgeBase()  # Uses default 'knowledge/' folder
 class SearchQuery(BaseModel):
     query: str
 
+class TranscriptLog(BaseModel):
+    role: str
+    text: str
+
 # --- Endpoints ---
+@app.post("/log_transcript")
+async def log_transcript(log: TranscriptLog):
+    """Log user/agent speech from the client."""
+    logger.info(f"[TRANSCRIPT] {log.role.upper()}: {log.text}")
+    return JSONResponse({"status": "logged"})
 @app.get("/")
 async def get():
     with open("index.html", "r") as f:
@@ -96,22 +105,47 @@ async def get_session_token():
         "Content-Type": "application/json"
     }
     
-    # Session config per Microsoft docs format
+    # Session config
     session_config = {
         "session": {
             "type": "realtime",
             "model": DEPLOYMENT_NAME,
+            "input_audio_transcription": {
+                "model": "whisper-1"
+            },
             "instructions": (
-                "You are a helpful, friendly AI assistant. "
-                "1. LANGUAGE: You must ALWAYS speak in ENGLISH. "
-                "2. STYLE: Be concise (1-2 sentences), casual, and use key contractions (can't, don't). "
-                "3. KNOWLEDGE: When asked about Michael Easter, comfort, or the Scarcity Brain, use the search_knowledge_base tool."
+                "You are a senior concierge voice agent for Aeroméxico airlines, providing expert customer service. "
+                "1. LANGUAGE: Detect the user's language and respond in the same language. "
+                "2. STYLE: Be professional, empathetic, concise (1-2 sentences per response), and use natural contractions (e.g., can't, don't). "
+                "3. KNOWLEDGE: For any questions about Aeroméxico flights, bookings, baggage policies, fare families, loyalty programs (Aeroméxico Rewards), "
+                "special services (e.g., pets, unaccompanied minors), documentation, onboard amenities, or operational details (e.g., Delta JV status, MEX lounges), "
+                "use the search_knowledge_base tool with a precise query to retrieve accurate info from the knowledge base. Do not speculate; base answers on KB results. "
+                "If info is unclear or unavailable, politely suggest contacting human support via phone or WhatsApp. "
+                "4. GENERAL: Greet users warmly, confirm understanding, and offer proactive help (e.g., 'Would you like to check baggage fees for your route?')."
             ),
             "audio": {
                 "output": {
-                    "voice": "shimmer"
+                    "voice": "shimmer"  # Professional, bright voice suitable for customer service
                 }
-            }
+            },
+            "tools": [
+                {
+                    "type": "function",
+                    "name": "search_knowledge_base",
+                    "description": "Searches the Aeroméxico knowledge base for information on flights, baggage, policies, loyalty, and services.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "query": {
+                                "type": "string",
+                                "description": "The search query to find relevant information in the knowledge base."
+                            }
+                        },
+                        "required": ["query"]
+                    }
+                }
+            ],
+            "tool_choice": "auto"
         }
     }
 
@@ -140,7 +174,7 @@ async def search_knowledge_base(query: SearchQuery):
     Searches the local knowledge base and returns results.
     Called by the frontend when the AI triggers the tool.
     """
-    logger.info(f"KB Search Request: '{query.query}'")
+    logger.info(f"Aeroméxico KB Search Request: '{query.query}'")
     result = kb.search(query.query)
     logger.debug(f"KB Result: {result[:200]}...")
     return JSONResponse(content={"result": result})
