@@ -2,7 +2,7 @@ import os
 import sys
 import logging
 import httpx
-from fastapi import FastAPI, Query
+from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -12,7 +12,7 @@ from knowledge_base import KnowledgeBase
 
 load_dotenv()
 
-# --- Logging Configuration ---
+# --- Logging Setup ---
 class InterceptHandler(logging.Handler):
     """Redirects standard logging to Loguru."""
     def emit(self, record):
@@ -52,16 +52,14 @@ DEPLOYMENT_NAME = os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME")
 
 if not all([AZURE_OPENAI_API_KEY, AZURE_OPENAI_ENDPOINT, DEPLOYMENT_NAME]):
     logger.error("Missing required environment variables. Please check .env file.")
-    raise ValueError("Missing required environment variables. Please check .env file.")
+    raise ValueError("Missing required environment variables.")
 
-# Parse hostname for API calls
 hostname = AZURE_OPENAI_ENDPOINT.replace("https://", "").replace("http://", "").rstrip("/")
 if "/" in hostname:
     hostname = hostname.split("/")[0]
 
 # --- Knowledge Base ---
-# Automatically loads all .txt and .md files from 'knowledge/' folder
-kb = KnowledgeBase()  # Uses default 'knowledge/' folder
+kb = KnowledgeBase()
 
 # --- Models ---
 class SearchQuery(BaseModel):
@@ -72,32 +70,25 @@ class TranscriptLog(BaseModel):
     text: str
 
 # --- Endpoints ---
-@app.post("/log_transcript")
-async def log_transcript(log: TranscriptLog):
-    """Log user/agent speech from the client."""
-    logger.info(f"[TRANSCRIPT] {log.role.upper()}: {log.text}")
-    return JSONResponse({"status": "logged"})
 @app.get("/")
 async def get():
+    """Serve the frontend."""
     with open("index.html", "r") as f:
         return HTMLResponse(f.read())
 
 @app.get("/config")
 async def get_config():
-    """Returns Azure configuration for the frontend (including API key for direct WebRTC)."""
+    """Returns Azure configuration for the frontend."""
     return JSONResponse(content={
         "hostname": hostname,
         "deployment": DEPLOYMENT_NAME,
-        "apiKey": AZURE_OPENAI_API_KEY  # For direct WebRTC auth
+        "apiKey": AZURE_OPENAI_API_KEY
     })
 
 @app.get("/session")
 async def get_session_token():
-    """
-    Fetches an ephemeral token from Azure OpenAI for the WebRTC client.
-    The browser will use this token to connect directly to Azure.
-    """
-    logger.info("Fetching ephemeral session token from Azure...")
+    """Fetches an ephemeral token from Azure OpenAI for WebRTC."""
+    logger.info("Fetching ephemeral session token...")
     
     token_url = f"https://{hostname}/openai/v1/realtime/client_secrets"
     headers = {
@@ -105,47 +96,23 @@ async def get_session_token():
         "Content-Type": "application/json"
     }
     
-    # Session config
     session_config = {
         "session": {
             "type": "realtime",
             "model": DEPLOYMENT_NAME,
-            "input_audio_transcription": {
-                "model": "whisper-1"
-            },
             "instructions": (
-                "You are a senior concierge voice agent for Aeroméxico airlines, providing expert customer service. "
-                "1. LANGUAGE: Detect the user's language and respond in the same language. "
-                "2. STYLE: Be professional, empathetic, concise (1-2 sentences per response), and use natural contractions (e.g., can't, don't). "
-                "3. KNOWLEDGE: For any questions about Aeroméxico flights, bookings, baggage policies, fare families, loyalty programs (Aeroméxico Rewards), "
-                "special services (e.g., pets, unaccompanied minors), documentation, onboard amenities, or operational details (e.g., Delta JV status, MEX lounges), "
-                "use the search_knowledge_base tool with a precise query to retrieve accurate info from the knowledge base. Do not speculate; base answers on KB results. "
-                "If info is unclear or unavailable, politely suggest contacting human support via phone or WhatsApp. "
-                "4. GENERAL: Greet users warmly, confirm understanding, and offer proactive help (e.g., 'Would you like to check baggage fees for your route?')."
+                "You are a senior concierge voice agent for Aeroméxico airlines. "
+                "1. LANGUAGE: Start in ENGLISH. If user speaks other languages, switch to them. "
+                "2. STYLE: Be professional, empathetic, concise (1-2 sentences). "
+                "3. KNOWLEDGE: You know Aeroméxico policies (baggage, pets, fare families, lounges). "
+                "4. LIMITATIONS: You cannot book flights or check real-time schedules. Be upfront about this. "
+                "5. PATIENCE: Wait for user to finish speaking before responding."
             ),
             "audio": {
                 "output": {
-                    "voice": "shimmer"  # Professional, bright voice suitable for customer service
+                    "voice": "shimmer"
                 }
-            },
-            "tools": [
-                {
-                    "type": "function",
-                    "name": "search_knowledge_base",
-                    "description": "Searches the Aeroméxico knowledge base for information on flights, baggage, policies, loyalty, and services.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "query": {
-                                "type": "string",
-                                "description": "The search query to find relevant information in the knowledge base."
-                            }
-                        },
-                        "required": ["query"]
-                    }
-                }
-            ],
-            "tool_choice": "auto"
+            }
         }
     }
 
@@ -155,31 +122,29 @@ async def get_session_token():
             response.raise_for_status()
             data = response.json()
             logger.info("Successfully obtained ephemeral token.")
-            # Token is in data.value per Microsoft docs
             return JSONResponse(content={
                 "token": data.get("value"),
                 "expires_at": data.get("expires_at"),
                 "session_id": data.get("id")
             })
-    except httpx.HTTPStatusError as e:
-        logger.error(f"Azure token request failed: {e.response.status_code} - {e.response.text}")
-        return JSONResponse(content={"error": str(e)}, status_code=e.response.status_code)
     except Exception as e:
         logger.error(f"Token fetch error: {e}")
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
+@app.post("/log_transcript")
+async def log_transcript(log: TranscriptLog):
+    """Log transcript from the client."""
+    logger.info(f"[TRANSCRIPT] {log.role.upper()}: {log.text}")
+    return JSONResponse({"status": "logged"})
+
 @app.post("/search_kb")
 async def search_knowledge_base(query: SearchQuery):
-    """
-    Searches the local knowledge base and returns results.
-    Called by the frontend when the AI triggers the tool.
-    """
-    logger.info(f"Aeroméxico KB Search Request: '{query.query}'")
+    """Search the knowledge base."""
+    logger.info(f"KB Search: '{query.query}'")
     result = kb.search(query.query)
-    logger.debug(f"KB Result: {result[:200]}...")
     return JSONResponse(content={"result": result})
 
 if __name__ == "__main__":
     import uvicorn
-    logger.info("Starting Uvicorn server (WebRTC Mode)...")
+    logger.info("Starting server...")
     uvicorn.run(app, host="0.0.0.0", port=8000)

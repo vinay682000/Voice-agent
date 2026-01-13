@@ -1,10 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Voice Assistant (WebRTC)</title>
+    <title>Aeroméxico Voice Assistant</title>
     <style>
         :root {
             --primary: #6366f1;
@@ -14,13 +13,7 @@
             --text: #f1f5f9;
             --text-muted: #94a3b8;
         }
-
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: var(--bg);
@@ -30,7 +23,6 @@
             justify-content: center;
             align-items: center;
         }
-
         .container {
             background: var(--card);
             padding: 2.5rem;
@@ -40,7 +32,6 @@
             max-width: 450px;
             width: 90%;
         }
-
         h1 {
             font-size: 1.75rem;
             margin-bottom: 0.5rem;
@@ -49,14 +40,12 @@
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
-
         .status {
             color: var(--text-muted);
             margin-bottom: 1.5rem;
             font-size: 0.9rem;
             min-height: 1.2rem;
         }
-
         .visualizer {
             display: flex;
             justify-content: center;
@@ -65,7 +54,6 @@
             align-items: flex-end;
             margin-bottom: 1.5rem;
         }
-
         .bar {
             width: 8px;
             background: linear-gradient(to top, var(--primary), #a855f7);
@@ -73,23 +61,11 @@
             transition: height 0.1s ease;
             height: 10px;
         }
-
-        .bar.active {
-            animation: pulse 0.5s ease-in-out infinite alternate;
-        }
-
+        .bar.active { animation: pulse 0.5s ease-in-out infinite alternate; }
         @keyframes pulse {
-            from {
-                height: 10px;
-                opacity: 0.6;
-            }
-
-            to {
-                height: 50px;
-                opacity: 1;
-            }
+            from { height: 10px; opacity: 0.6; }
+            to { height: 50px; opacity: 1; }
         }
-
         button {
             background: linear-gradient(135deg, var(--primary), var(--primary-dark));
             color: white;
@@ -101,18 +77,11 @@
             transition: all 0.3s ease;
             font-weight: 600;
         }
-
         button:hover {
             transform: translateY(-2px);
             box-shadow: 0 10px 20px rgba(99, 102, 241, 0.3);
         }
-
-        button:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-            transform: none;
-        }
-
+        button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
         .transcript {
             margin-top: 1.5rem;
             padding: 1rem;
@@ -124,37 +93,26 @@
             font-size: 0.85rem;
             line-height: 1.6;
         }
-
-        .transcript .user {
-            color: #60a5fa;
-        }
-
-        .transcript .agent {
-            color: #34d399;
-        }
+        .transcript .user { color: #60a5fa; }
+        .transcript .agent { color: #34d399; }
     </style>
 </head>
-
 <body>
     <div class="container">
-        <h1>Voice Assistant</h1>
+        <h1>Aeroméxico Assistant</h1>
         <div id="status" class="status">Click below to start</div>
         <div class="visualizer" id="visualizer">
-            <div class="bar"></div>
-            <div class="bar"></div>
-            <div class="bar"></div>
-            <div class="bar"></div>
-            <div class="bar"></div>
-            <div class="bar"></div>
-            <div class="bar"></div>
-            <div class="bar"></div>
+            <div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div>
+            <div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div>
         </div>
         <button id="startBtn">Start Conversation</button>
+        <div id="transcript" class="transcript"></div>
     </div>
 
     <script>
         const statusEl = document.getElementById('status');
         const startBtn = document.getElementById('startBtn');
+        const transcriptEl = document.getElementById('transcript');
         const bars = document.querySelectorAll('.bar');
 
         let peerConnection = null;
@@ -163,7 +121,6 @@
 
         startBtn.onclick = async () => {
             if (peerConnection) {
-                // Stop the session
                 peerConnection.close();
                 peerConnection = null;
                 dataChannel = null;
@@ -174,30 +131,22 @@
             }
 
             startBtn.disabled = true;
-            statusEl.innerText = "Getting Azure config...";
+            statusEl.innerText = "Connecting...";
 
             try {
-                // 1. Get Azure config (including API key) from our backend
                 const configRes = await fetch('/config');
                 const config = await configRes.json();
 
-                // 2. Get ephemeral token from our backend
-                statusEl.innerText = "Fetching session token...";
                 const tokenRes = await fetch('/session');
                 const tokenData = await tokenRes.json();
+                if (tokenData.error) throw new Error(tokenData.error);
 
-                if (tokenData.error) {
-                    throw new Error(tokenData.error);
-                }
-
-                const ephemeralToken = tokenData.token;
-
-                statusEl.innerText = "Connecting to Azure...";
-
-                // 2. Create RTCPeerConnection
                 peerConnection = new RTCPeerConnection();
 
-                // 3. Set up audio element to play remote audio
+                peerConnection.ondatachannel = (event) => {
+                    event.channel.onmessage = handleMessage;
+                };
+
                 audioElement = document.createElement('audio');
                 audioElement.autoplay = true;
                 peerConnection.ontrack = (event) => {
@@ -205,50 +154,34 @@
                     bars.forEach(b => b.classList.add('active'));
                 };
 
-                // 4. Get user microphone and add track
                 const stream = await navigator.mediaDevices.getUserMedia({
-                    audio: {
-                        echoCancellation: true,
-                        noiseSuppression: true,
-                        autoGainControl: true
-                    }
+                    audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
                 });
                 stream.getTracks().forEach(track => peerConnection.addTrack(track, stream));
 
-                // 5. Create data channel for messages
                 dataChannel = peerConnection.createDataChannel('oai-events');
                 dataChannel.onopen = () => {
-                    console.log('Data channel open');
-                    statusEl.innerText = "Connected! Start speaking...";
+                    statusEl.innerText = "Connected!";
                 };
-                dataChannel.onmessage = handleDataChannelMessage;
+                dataChannel.onmessage = handleMessage;
 
-                // 6. Create offer
                 const offer = await peerConnection.createOffer();
                 await peerConnection.setLocalDescription(offer);
 
-                // 7. Send offer to Azure OpenAI Realtime API (per Microsoft docs: no query params)
-                const sdpAnswerUrl = `https://${config.hostname}/openai/v1/realtime/calls`;
-
-                const sdpResponse = await fetch(sdpAnswerUrl, {
+                const sdpResponse = await fetch('https://' + config.hostname + '/openai/v1/realtime/calls', {
                     method: 'POST',
                     headers: {
-                        'Authorization': `Bearer ${ephemeralToken}`,
+                        'Authorization': 'Bearer ' + tokenData.token,
                         'Content-Type': 'application/sdp'
                     },
                     body: offer.sdp
                 });
 
-                if (!sdpResponse.ok) {
-                    const errorText = await sdpResponse.text();
-                    console.error('Azure SDP exchange failed:', errorText);
-                    throw new Error(`SDP exchange failed: ${sdpResponse.status}`);
-                }
+                if (!sdpResponse.ok) throw new Error('Connection failed: ' + sdpResponse.status);
 
-                const answerSdp = await sdpResponse.text();
                 await peerConnection.setRemoteDescription({
                     type: 'answer',
-                    sdp: answerSdp
+                    sdp: await sdpResponse.text()
                 });
 
                 startBtn.textContent = 'End Conversation';
@@ -256,7 +189,7 @@
 
             } catch (error) {
                 console.error('Connection error:', error);
-                statusEl.innerText = `Error: ${error.message}`;
+                statusEl.innerText = 'Error: ' + error.message;
                 startBtn.disabled = false;
                 if (peerConnection) {
                     peerConnection.close();
@@ -265,31 +198,61 @@
             }
         };
 
-        function handleDataChannelMessage(event) {
-            const msg = JSON.parse(event.data);
-            console.log('Azure Event:', msg.type, msg);
+        function handleMessage(event) {
+            try {
+                const msg = JSON.parse(event.data);
 
-            if (msg.type === 'conversation.item.input_audio_transcription.completed') {
-                addToTranscript('user', msg.transcript);
-            } else if (msg.type === 'response.audio_transcript.done') {
-                addToTranscript('agent', msg.transcript);
-            } else if (msg.type === 'response.function_call_arguments.done') {
-                // Tool call - hit our backend
-                handleToolCall(msg);
-            } else if (msg.type === 'session.created') {
-                console.log('Session created:', msg.session);
-            } else if (msg.type === 'error') {
-                console.error('Azure Error:', msg.error);
-                statusEl.innerText = `Error: ${msg.error.message}`;
+                switch (msg.type) {
+                    case 'session.created':
+                        if (dataChannel && dataChannel.readyState === 'open') {
+                            dataChannel.send(JSON.stringify({ type: "response.create" }));
+                            statusEl.innerText = "Agent is greeting you...";
+                        }
+                        break;
+
+                    case 'input_audio_buffer.speech_started':
+                        statusEl.innerText = "🎤 Listening...";
+                        break;
+
+                    case 'input_audio_buffer.speech_stopped':
+                        statusEl.innerText = "Processing...";
+                        break;
+
+                    case 'input_audio_buffer.committed':
+                        addToTranscript('user', '[User spoke]');
+                        break;
+
+                    case 'output_audio_buffer.started':
+                        statusEl.innerText = "🔊 Agent speaking...";
+                        break;
+
+                    case 'output_audio_buffer.stopped':
+                        statusEl.innerText = "Connected";
+                        break;
+
+                    case 'response.output_audio_transcript.done':
+                        if (msg.transcript) {
+                            addToTranscript('agent', msg.transcript);
+                        }
+                        break;
+
+                    case 'response.function_call_arguments.done':
+                        handleToolCall(msg);
+                        break;
+
+                    case 'error':
+                        console.error('Azure Error:', msg.error);
+                        break;
+                }
+            } catch (e) {
+                console.error('Message parse error:', e);
             }
         }
 
         async function handleToolCall(msg) {
             if (msg.name === 'search_knowledge_base') {
-                const args = JSON.parse(msg.arguments);
-                console.log('Tool Call: search_knowledge_base', args.query);
-
                 try {
+                    const args = JSON.parse(msg.arguments);
                     const response = await fetch('/search_kb', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -297,7 +260,6 @@
                     });
                     const data = await response.json();
 
-                    // Send tool result back to Azure
                     if (dataChannel && dataChannel.readyState === 'open') {
                         dataChannel.send(JSON.stringify({
                             type: 'conversation.item.create',
@@ -316,21 +278,24 @@
         }
 
         async function addToTranscript(role, text) {
-            if (!text || text.trim() === '') return;
-            console.log(`[Transcript] ${role}: ${text}`);
+            if (!text || !text.trim()) return;
 
-            // Send to server for logging
+            const div = document.createElement('div');
+            div.className = role;
+            div.innerHTML = '<strong>' + (role === 'user' ? 'You' : 'Agent') + ':</strong> ' + text;
+            transcriptEl.appendChild(div);
+            transcriptEl.scrollTop = transcriptEl.scrollHeight;
+
             try {
                 await fetch('/log_transcript', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ role, text })
+                    body: JSON.stringify({ role: role, text: text })
                 });
             } catch (e) {
-                console.error('Failed to log transcript:', e);
+                console.error('Log error:', e);
             }
         }
     </script>
 </body>
-
 </html>
